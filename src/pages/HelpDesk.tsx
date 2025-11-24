@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Clock, CheckCircle2, User, Building2, MessageSquare } from "lucide-react";
+import { Bell, Clock, CheckCircle2, User, Building2, MessageSquare, Paperclip, Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,7 @@ export default function HelpDesk() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [comment, setComment] = useState("");
   const [newStatus, setNewStatus] = useState<string>("");
+  const [attachments, setAttachments] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -193,9 +194,17 @@ export default function HelpDesk() {
             <Card
               key={alarm.id}
               className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => {
+              onClick={async () => {
                 setSelectedAlarm(alarm);
                 setNewStatus(alarm.status);
+                
+                // Load attachments
+                const { data: alarmAttachments } = await supabase
+                  .from("alarm_attachments")
+                  .select("*")
+                  .eq("alarm_id", alarm.id);
+                setAttachments(alarmAttachments || []);
+                
                 setDialogOpen(true);
               }}
             >
@@ -273,6 +282,44 @@ export default function HelpDesk() {
                     </p>
                   </div>
                 </div>
+
+                {attachments.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Archivos Adjuntos</h4>
+                    <div className="space-y-2">
+                      {attachments.map((attachment) => (
+                        <div
+                          key={attachment.id}
+                          className="flex items-center justify-between p-3 bg-muted rounded-lg"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Paperclip className="h-4 w-4" />
+                            <div>
+                              <p className="text-sm font-medium">{attachment.file_name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(attachment.file_size / 1024).toFixed(1)} KB
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              const { data } = await supabase.storage
+                                .from("alarm-attachments")
+                                .createSignedUrl(attachment.file_path, 60);
+                              if (data?.signedUrl) {
+                                window.open(data.signedUrl, "_blank");
+                              }
+                            }}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="status">Cambiar Estado</Label>
