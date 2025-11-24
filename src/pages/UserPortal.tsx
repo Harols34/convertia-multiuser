@@ -161,12 +161,12 @@ export default function UserPortal() {
       .from("user_applications")
       .select(`
         *,
-        global_applications:global_application_id (
+        global_applications!global_application_id (
           name,
           description,
           url
         ),
-        company_applications:application_id (
+        company_applications!application_id (
           name,
           description,
           url
@@ -176,13 +176,15 @@ export default function UserPortal() {
 
     if (appsError) {
       console.error("Error loading applications:", appsError);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los aplicativos",
+        variant: "destructive",
+      });
     }
 
     if (userApps) {
-      console.log("User applications loaded:", userApps);
       setApplications(userApps as any);
-    } else {
-      console.log("No applications found for user");
     }
 
     setUserData(user);
@@ -376,13 +378,8 @@ export default function UserPortal() {
                       </div>
                     ) : (
                       applications.map((app) => {
-                        console.log("Rendering app:", app);
                         const appData = app.global_applications || app.company_applications;
-                        console.log("App data:", appData);
-                        if (!appData) {
-                          console.log("No app data found, skipping");
-                          return null;
-                        }
+                        if (!appData) return null;
 
                         return (
                           <Collapsible key={app.id}>
