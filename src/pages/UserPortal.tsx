@@ -115,43 +115,25 @@ export default function UserPortal() {
 
     const { data: userApps } = await supabase
       .from("user_applications")
-      .select("*")
+      .select(`
+        *,
+        global_applications:global_application_id (
+          id,
+          name,
+          description,
+          url
+        ),
+        company_applications:application_id (
+          id,
+          name,
+          description,
+          url
+        )
+      `)
       .eq("end_user_id", user.id);
 
     if (userApps) {
-      const globalAppIds = userApps
-        .filter((app) => app.global_application_id)
-        .map((app) => app.global_application_id);
-
-      const { data: globalApps } = globalAppIds.length > 0
-        ? await supabase
-            .from("global_applications")
-            .select("id, name, description, url")
-            .in("id", globalAppIds)
-        : { data: [] };
-
-      const companyAppIds = userApps
-        .filter((app) => app.application_id)
-        .map((app) => app.application_id);
-
-      const { data: companyApps } = companyAppIds.length > 0
-        ? await supabase
-            .from("company_applications")
-            .select("id, name, description, url")
-            .in("id", companyAppIds)
-        : { data: [] };
-
-      const enrichedApps = userApps.map((app) => ({
-        ...app,
-        global_applications: app.global_application_id
-          ? globalApps?.find((g) => g.id === app.global_application_id) || null
-          : null,
-        company_applications: app.application_id
-          ? companyApps?.find((c) => c.id === app.application_id) || null
-          : null,
-      }));
-
-      setApplications(enrichedApps as any);
+      setApplications(userApps as any);
     }
 
     setUserData(user);
@@ -292,7 +274,7 @@ export default function UserPortal() {
                   <div>
                     <CardTitle className="text-2xl">{userData.full_name}</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {userData.companies.name} • Doc: {userData.document_number}
+                      {userData.companies?.name || "Sin empresa"} • Doc: {userData.document_number}
                     </p>
                   </div>
                   <Button
