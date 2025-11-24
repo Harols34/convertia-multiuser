@@ -443,6 +443,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "user_applications_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "company_applications"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "user_applications_end_user_id_fkey"
             columns: ["end_user_id"]
             isOneToOne: false
