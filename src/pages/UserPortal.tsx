@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Key, Grid3x3, Bell, ExternalLink } from "lucide-react";
+import { Search, Key, Grid3x3, Bell, ExternalLink, Paperclip, X } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -40,21 +41,31 @@ interface UserApplication {
 }
 
 export default function UserPortal() {
+  const [searchParams] = useSearchParams();
   const [accessCode, setAccessCode] = useState("");
   const [searching, setSearching] = useState(false);
   const [userData, setUserData] = useState<EndUser | null>(null);
   const [applications, setApplications] = useState<UserApplication[]>([]);
   const [showAlarmForm, setShowAlarmForm] = useState(false);
   const [alarmData, setAlarmData] = useState({ title: "", description: "" });
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { toast } = useToast();
 
-  const handleSearch = async () => {
-    if (!accessCode.trim()) {
-      toast({
-        title: "Error",
-        description: "Por favor ingresa tu código de acceso",
-        variant: "destructive",
-      });
+  // Cargar automáticamente si viene el código por URL
+  useEffect(() => {
+    const code = searchParams.get("code");
+    if (code) {
+      setAccessCode(code);
+      // Pequeño delay para que se vea el código antes de buscar
+      setTimeout(() => {
+        handleSearchWithCode(code);
+      }, 300);
+    }
+  }, [searchParams]);
+
+  const handleSearchWithCode = async (code: string) => {
+    if (!code.trim()) {
       return;
     }
 
@@ -64,7 +75,7 @@ export default function UserPortal() {
     const { data: user, error: userError } = await supabase
       .from("end_users")
       .select("*, companies(name)")
-      .eq("access_code", accessCode.trim())
+      .eq("access_code", code.trim())
       .maybeSingle();
 
     if (userError || !user) {
@@ -126,6 +137,19 @@ export default function UserPortal() {
     setSearching(false);
   };
 
+  const handleSearch = async () => {
+    if (!accessCode.trim()) {
+      toast({
+        title: "Error",
+        description: "Por favor ingresa tu código de acceso",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    handleSearchWithCode(accessCode.trim());
+  };
+
   const handleCreateAlarm = async () => {
     if (!userData || !alarmData.title || !alarmData.description) {
       toast({
@@ -136,29 +160,68 @@ export default function UserPortal() {
       return;
     }
 
-    const { error } = await supabase.from("alarms").insert([
-      {
-        end_user_id: userData.id,
-        title: alarmData.title,
-        description: alarmData.description,
-        priority: "media",
-      },
-    ]);
+    setUploadingFiles(true);
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo crear la alarma",
-        variant: "destructive",
-      });
-    } else {
+    try {
+      // Crear la alarma primero
+      const { data: alarm, error: alarmError } = await supabase
+        .from("alarms")
+        .insert([
+          {
+            end_user_id: userData.id,
+            title: alarmData.title,
+            description: alarmData.description,
+            priority: "media",
+          },
+        ])
+        .select()
+        .single();
+
+      if (alarmError) {
+        throw alarmError;
+      }
+
+      // Subir archivos adjuntos si hay
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const fileExt = file.name.split(".").pop();
+          const fileName = `${alarm.id}/${Date.now()}.${fileExt}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("alarm-attachments")
+            .upload(fileName, file);
+
+          if (!uploadError) {
+            await supabase.from("alarm_attachments").insert([
+              {
+                alarm_id: alarm.id,
+                file_name: file.name,
+                file_path: fileName,
+                file_type: file.type,
+                file_size: file.size,
+              },
+            ]);
+          }
+        }
+      }
+
       toast({
         title: "Alarma creada",
         description: "Tu solicitud ha sido enviada correctamente",
       });
+
       setAlarmData({ title: "", description: "" });
+      setSelectedFiles([]);
       setShowAlarmForm(false);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "No se pudo crear la alarma: " + error.message,
+        variant: "destructive",
+      });
     }
+
+    setUploadingFiles(false);
   };
 
   return (
@@ -351,15 +414,76 @@ export default function UserPortal() {
                         rows={4}
                       />
                     </div>
+
+                    {/* Adjuntar archivos */}
+                    <div className="space-y-2">
+                      <Label htmlFor="file-upload">Adjuntar Evidencia (opcional)</Label>
+                      <div className="space-y-2">
+                        <input
+                          id="file-upload"
+                          type="file"
+                          multiple
+                          accept="image/*,video/*,.pdf,.doc,.docx"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            setSelectedFiles((prev) => [...prev, ...files]);
+                          }}
+                          className="hidden"
+                        />
+                        <label htmlFor="file-upload">
+                          <Button type="button" variant="outline" className="w-full" asChild>
+                            <span>
+                              <Paperclip className="mr-2 h-4 w-4" />
+                              Seleccionar Archivos
+                            </span>
+                          </Button>
+                        </label>
+
+                        {selectedFiles.length > 0 && (
+                          <div className="space-y-2">
+                            {selectedFiles.map((file, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center justify-between p-2 bg-muted rounded-lg"
+                              >
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Paperclip className="h-3 w-3" />
+                                  <span className="truncate max-w-[200px]">{file.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    ({(file.size / 1024).toFixed(1)} KB)
+                                  </span>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+                                  }
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     <div className="flex gap-2">
-                      <Button onClick={handleCreateAlarm} className="flex-1">
-                        Enviar Solicitud
+                      <Button
+                        onClick={handleCreateAlarm}
+                        className="flex-1"
+                        disabled={uploadingFiles}
+                      >
+                        {uploadingFiles ? "Enviando..." : "Enviar Solicitud"}
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => {
                           setShowAlarmForm(false);
                           setAlarmData({ title: "", description: "" });
+                          setSelectedFiles([]);
                         }}
                       >
                         Cancelar

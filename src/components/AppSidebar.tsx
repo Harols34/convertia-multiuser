@@ -19,7 +19,6 @@ const menuItems = [
   { title: "Personal", url: "/personnel", icon: Users },
   { title: "Aplicativos", url: "/applications", icon: Grid3x3 },
   { title: "Mesa de Ayuda", url: "/help-desk", icon: Bell },
-  { title: "Busca tu Info", url: "/user-portal", icon: Search },
 ];
 
 export function AppSidebar() {

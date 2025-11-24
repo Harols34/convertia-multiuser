@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Plus, Pencil, Trash2, Key } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Key, Upload, FileSpreadsheet } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -192,24 +192,35 @@ export default function Personnel() {
           </p>
         </div>
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button
-              onClick={() => {
-                setEditingUser(null);
-                setFormData({
-                  company_id: "",
-                  document_number: "",
-                  full_name: "",
-                  phone: "",
-                  email: "",
-                });
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo Usuario
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => window.location.href = "/bulk-personnel"}>
+            <Upload className="mr-2 h-4 w-4" />
+            Carga Masiva
+          </Button>
+
+          <Button variant="outline" onClick={() => window.location.href = "/bulk-edit"}>
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Vista Excel
+          </Button>
+
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                onClick={() => {
+                  setEditingUser(null);
+                  setFormData({
+                    company_id: "",
+                    document_number: "",
+                    full_name: "",
+                    phone: "",
+                    email: "",
+                  });
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo Usuario
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
@@ -300,6 +311,7 @@ export default function Personnel() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {loading ? (

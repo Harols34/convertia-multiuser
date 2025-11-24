@@ -2,14 +2,17 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
+import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Personnel from "./pages/Personnel";
+import BulkPersonnel from "./pages/BulkPersonnel";
+import BulkEdit from "./pages/BulkEdit";
 import Applications from "./pages/Applications";
 import HelpDesk from "./pages/HelpDesk";
 import UserPortal from "./pages/UserPortal";
@@ -25,14 +28,14 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            {/* Ruta raíz redirige al dashboard */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            {/* Home público - Portal de acceso para usuarios */}
+            <Route path="/" element={<Home />} />
             
             {/* Autenticación */}
             <Route path="/auth" element={<Auth />} />
             
             {/* Portal público de usuarios (sin autenticación) */}
-            <Route path="/user-portal" element={<UserPortal />} />
+            <Route path="/busca-tu-info" element={<UserPortal />} />
             
             {/* Rutas protegidas del administrador */}
             <Route
@@ -61,6 +64,26 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Personnel />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bulk-personnel"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <BulkPersonnel />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bulk-edit"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <BulkEdit />
                   </Layout>
                 </ProtectedRoute>
               }
