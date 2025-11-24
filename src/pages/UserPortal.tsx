@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Key, Grid3x3, Bell, ExternalLink, Paperclip, X } from "lucide-react";
+import { Search, Key, Grid3x3, Bell, ExternalLink, Paperclip, X, Home, FileText, Download } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UserChat from "./UserChat";
 import {
@@ -52,6 +52,8 @@ export default function UserPortal() {
   const [alarmData, setAlarmData] = useState({ title: "", description: "" });
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [userAlarms, setUserAlarms] = useState<any[]>([]);
+  const [loadingAlarms, setLoadingAlarms] = useState(false);
   const { toast } = useToast();
 
   // Cargar automáticamente si viene el código por URL
@@ -69,6 +71,8 @@ export default function UserPortal() {
   useEffect(() => {
     if (!userData) return;
 
+    loadUserAlarms();
+
     const channel = supabase
       .channel(`user-apps-${userData.id}`)
       .on(
@@ -85,12 +89,50 @@ export default function UserPortal() {
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "alarms",
+          filter: `end_user_id=eq.${userData.id}`,
+        },
+        () => {
+          loadUserAlarms();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [userData, accessCode]);
+
+  const loadUserAlarms = async () => {
+    if (!userData) return;
+    
+    setLoadingAlarms(true);
+    const { data, error } = await supabase
+      .from("alarms")
+      .select("*")
+      .eq("end_user_id", userData.id)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      // Load attachments for each alarm
+      const alarmsWithAttachments = await Promise.all(
+        data.map(async (alarm) => {
+          const { data: attachments } = await supabase
+            .from("alarm_attachments")
+            .select("*")
+            .eq("alarm_id", alarm.id);
+          return { ...alarm, attachments: attachments || [] };
+        })
+      );
+      setUserAlarms(alarmsWithAttachments);
+    }
+    setLoadingAlarms(false);
+  };
 
   const handleSearchWithCode = async (code: string) => {
     if (!code.trim()) return;
@@ -212,6 +254,7 @@ export default function UserPortal() {
       setAlarmData({ title: "", description: "" });
       setSelectedFiles([]);
       setShowAlarmForm(false);
+      loadUserAlarms();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -227,6 +270,12 @@ export default function UserPortal() {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="text-center space-y-2">
+          <div className="flex justify-between items-center mb-4">
+            <Button variant="outline" onClick={() => window.location.href = "/"}>
+              <Home className="mr-2 h-4 w-4" />
+              Volver al Inicio
+            </Button>
+          </div>
           <h1 className="text-4xl font-bold tracking-tight">Busca tu Info</h1>
           <p className="text-muted-foreground">
             Ingresa tu código de acceso para ver tus aplicativos
@@ -293,8 +342,9 @@ export default function UserPortal() {
             </Card>
 
             <Tabs defaultValue="applications" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="applications">Mis Aplicativos</TabsTrigger>
+                <TabsTrigger value="history">Mis Alarmas</TabsTrigger>
                 <TabsTrigger value="alarms">Crear Alarma</TabsTrigger>
                 <TabsTrigger value="chat">Chat</TabsTrigger>
               </TabsList>
@@ -373,6 +423,102 @@ export default function UserPortal() {
                           </Collapsible>
                         );
                       })
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="history">
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Historial de Alarmas
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {loadingAlarms ? (
+                      <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
+                    ) : userAlarms.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No tienes alarmas registradas
+                      </p>
+                    ) : (
+                      userAlarms.map((alarm) => (
+                        <Collapsible key={alarm.id}>
+                          <CollapsibleTrigger className="w-full">
+                            <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted transition-colors">
+                              <div className="flex items-center gap-3 text-left">
+                                <div className="bg-muted p-2 rounded-lg">
+                                  <Bell className="h-5 w-5 text-foreground" />
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold">{alarm.title}</h4>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(alarm.created_at).toLocaleString()}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-xs px-2 py-1 rounded ${
+                                      alarm.status === "abierta" ? "bg-destructive/10 text-destructive" :
+                                      alarm.status === "en_proceso" ? "bg-yellow-500/10 text-yellow-600" :
+                                      alarm.status === "resuelta" ? "bg-green-500/10 text-green-600" :
+                                      "bg-muted text-muted-foreground"
+                                    }`}>
+                                      {alarm.status === "abierta" ? "Abierta" :
+                                       alarm.status === "en_proceso" ? "En Proceso" :
+                                       alarm.status === "resuelta" ? "Resuelta" : "Cerrada"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Prioridad: {alarm.priority}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="ml-4 mt-2 p-4 border-l-2 border-muted space-y-3">
+                              <div>
+                                <span className="font-medium text-sm">Descripción:</span>
+                                <p className="text-sm text-muted-foreground mt-1">{alarm.description}</p>
+                              </div>
+                              
+                              {alarm.attachments && alarm.attachments.length > 0 && (
+                                <div>
+                                  <span className="font-medium text-sm">Archivos Adjuntos:</span>
+                                  <div className="space-y-2 mt-2">
+                                    {alarm.attachments.map((attachment: any) => (
+                                      <div key={attachment.id} className="flex items-center justify-between p-2 bg-muted rounded-lg">
+                                        <div className="flex items-center gap-2 text-sm">
+                                          <Paperclip className="h-3 w-3" />
+                                          <span className="truncate max-w-[200px]">{attachment.file_name}</span>
+                                        </div>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={async () => {
+                                            const { data } = await supabase.storage
+                                              .from("alarm-attachments")
+                                              .createSignedUrl(attachment.file_path, 60);
+                                            if (data?.signedUrl) {
+                                              window.open(data.signedUrl, "_blank");
+                                            }
+                                          }}
+                                        >
+                                          <Download className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      ))
                     )}
                   </CardContent>
                 </Card>
