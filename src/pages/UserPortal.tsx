@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Key, Grid3x3, Bell, ExternalLink, Paperclip, X } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import UserChat from "./UserChat";
 import {
   Collapsible,
   CollapsibleContent,
@@ -57,21 +59,44 @@ export default function UserPortal() {
     const code = searchParams.get("code");
     if (code) {
       setAccessCode(code);
-      // Pequeño delay para que se vea el código antes de buscar
       setTimeout(() => {
         handleSearchWithCode(code);
       }, 300);
     }
   }, [searchParams]);
 
+  // Subscribe to real-time updates for user applications
+  useEffect(() => {
+    if (!userData) return;
+
+    const channel = supabase
+      .channel(`user-apps-${userData.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_applications",
+          filter: `end_user_id=eq.${userData.id}`,
+        },
+        () => {
+          if (accessCode) {
+            handleSearchWithCode(accessCode);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userData, accessCode]);
+
   const handleSearchWithCode = async (code: string) => {
-    if (!code.trim()) {
-      return;
-    }
+    if (!code.trim()) return;
 
     setSearching(true);
 
-    // Buscar usuario
     const { data: user, error: userError } = await supabase
       .from("end_users")
       .select("*, companies(name)")
@@ -88,14 +113,12 @@ export default function UserPortal() {
       return;
     }
 
-    // Buscar aplicaciones del usuario
     const { data: userApps } = await supabase
       .from("user_applications")
       .select("*")
       .eq("end_user_id", user.id);
 
     if (userApps) {
-      // Obtener detalles de aplicaciones globales
       const globalAppIds = userApps
         .filter((app) => app.global_application_id)
         .map((app) => app.global_application_id);
@@ -107,7 +130,6 @@ export default function UserPortal() {
             .in("id", globalAppIds)
         : { data: [] };
 
-      // Obtener detalles de aplicaciones de empresa
       const companyAppIds = userApps
         .filter((app) => app.application_id)
         .map((app) => app.application_id);
@@ -119,7 +141,6 @@ export default function UserPortal() {
             .in("id", companyAppIds)
         : { data: [] };
 
-      // Combinar los datos
       const enrichedApps = userApps.map((app) => ({
         ...app,
         global_applications: app.global_application_id
@@ -163,7 +184,6 @@ export default function UserPortal() {
     setUploadingFiles(true);
 
     try {
-      // Crear la alarma primero
       const { data: alarm, error: alarmError } = await supabase
         .from("alarms")
         .insert([
@@ -177,11 +197,8 @@ export default function UserPortal() {
         .select()
         .single();
 
-      if (alarmError) {
-        throw alarmError;
-      }
+      if (alarmError) throw alarmError;
 
-      // Subir archivos adjuntos si hay
       if (selectedFiles.length > 0) {
         for (const file of selectedFiles) {
           const fileExt = file.name.split(".").pop();
@@ -227,7 +244,6 @@ export default function UserPortal() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5 p-6">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold tracking-tight">Busca tu Info</h1>
           <p className="text-muted-foreground">
@@ -235,7 +251,6 @@ export default function UserPortal() {
           </p>
         </div>
 
-        {/* Búsqueda */}
         {!userData ? (
           <Card className="shadow-lg">
             <CardContent className="pt-6">
@@ -250,9 +265,7 @@ export default function UserPortal() {
                         placeholder="Ingresa tu código único"
                         value={accessCode}
                         onChange={(e) => setAccessCode(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleSearch();
-                        }}
+                        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                         className="pl-10"
                       />
                     </div>
@@ -273,7 +286,6 @@ export default function UserPortal() {
           </Card>
         ) : (
           <>
-            {/* Información del usuario */}
             <Card className="shadow-lg">
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -298,201 +310,215 @@ export default function UserPortal() {
               </CardHeader>
             </Card>
 
-            {/* Aplicativos */}
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Grid3x3 className="h-5 w-5" />
-                  Tus Aplicativos
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {applications.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No tienes aplicativos asignados
-                  </p>
-                ) : (
-                  applications.map((app) => {
-                    const appData = app.global_applications || app.company_applications;
-                    if (!appData) return null;
+            <Tabs defaultValue="applications" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="applications">Mis Aplicativos</TabsTrigger>
+                <TabsTrigger value="alarms">Crear Alarma</TabsTrigger>
+                <TabsTrigger value="chat">Chat</TabsTrigger>
+              </TabsList>
 
-                    return (
-                      <Collapsible key={app.id}>
-                        <CollapsibleTrigger className="w-full">
-                          <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-secondary/50 transition-colors">
-                            <div className="flex items-center gap-3 text-left">
-                              <div className="bg-primary/10 p-2 rounded-lg">
-                                <Grid3x3 className="h-5 w-5 text-primary" />
+              <TabsContent value="applications">
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Grid3x3 className="h-5 w-5" />
+                      Tus Aplicativos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {applications.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No tienes aplicativos asignados
+                      </p>
+                    ) : (
+                      applications.map((app) => {
+                        const appData = app.global_applications || app.company_applications;
+                        if (!appData) return null;
+
+                        return (
+                          <Collapsible key={app.id}>
+                            <CollapsibleTrigger className="w-full">
+                              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-secondary/50 transition-colors">
+                                <div className="flex items-center gap-3 text-left">
+                                  <div className="bg-primary/10 p-2 rounded-lg">
+                                    <Grid3x3 className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-semibold">{appData.name}</h4>
+                                    {appData.description && (
+                                      <p className="text-xs text-muted-foreground">
+                                        {appData.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
                               </div>
-                              <div>
-                                <h4 className="font-semibold">{appData.name}</h4>
-                                {appData.description && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {appData.description}
-                                  </p>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="ml-4 mt-2 p-4 border-l-2 border-primary/20 space-y-2">
+                                {appData.url && (
+                                  <a
+                                    href={appData.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-sm text-primary hover:underline"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    Abrir aplicativo
+                                  </a>
+                                )}
+                                {app.username && (
+                                  <div className="text-sm">
+                                    <span className="font-medium">Usuario:</span>{" "}
+                                    <code className="bg-muted px-2 py-1 rounded">{app.username}</code>
+                                  </div>
+                                )}
+                                {app.password && (
+                                  <div className="text-sm">
+                                    <span className="font-medium">Contraseña:</span>{" "}
+                                    <code className="bg-muted px-2 py-1 rounded">{app.password}</code>
+                                  </div>
+                                )}
+                                {app.notes && (
+                                  <div className="text-sm">
+                                    <span className="font-medium">Notas:</span>
+                                    <p className="text-muted-foreground mt-1">{app.notes}</p>
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <div className="ml-4 mt-2 p-4 border-l-2 border-primary/20 space-y-2">
-                            {appData.url && (
-                              <a
-                                href={appData.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-sm text-primary hover:underline"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                                Abrir aplicativo
-                              </a>
-                            )}
-                            {app.username && (
-                              <div className="text-sm">
-                                <span className="font-medium">Usuario:</span>{" "}
-                                <code className="bg-muted px-2 py-1 rounded">{app.username}</code>
-                              </div>
-                            )}
-                            {app.password && (
-                              <div className="text-sm">
-                                <span className="font-medium">Contraseña:</span>{" "}
-                                <code className="bg-muted px-2 py-1 rounded">{app.password}</code>
-                              </div>
-                            )}
-                            {app.notes && (
-                              <div className="text-sm">
-                                <span className="font-medium">Notas:</span>
-                                <p className="text-muted-foreground mt-1">{app.notes}</p>
-                              </div>
-                            )}
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        );
+                      })
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-            {/* Crear alarma */}
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  ¿Necesitas ayuda?
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!showAlarmForm ? (
-                  <Button onClick={() => setShowAlarmForm(true)} className="w-full">
-                    Crear nueva solicitud de ayuda
-                  </Button>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="alarm-title">Asunto *</Label>
-                      <Input
-                        id="alarm-title"
-                        placeholder="Describe brevemente el problema"
-                        value={alarmData.title}
-                        onChange={(e) =>
-                          setAlarmData({ ...alarmData, title: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="alarm-description">Descripción *</Label>
-                      <Textarea
-                        id="alarm-description"
-                        placeholder="Explica con detalle tu problema o solicitud"
-                        value={alarmData.description}
-                        onChange={(e) =>
-                          setAlarmData({ ...alarmData, description: e.target.value })
-                        }
-                        rows={4}
-                      />
-                    </div>
+              <TabsContent value="alarms">
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Bell className="h-5 w-5" />
+                      ¿Necesitas ayuda?
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {!showAlarmForm ? (
+                      <Button onClick={() => setShowAlarmForm(true)} className="w-full">
+                        Crear nueva solicitud de ayuda
+                      </Button>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="alarm-title">Asunto *</Label>
+                          <Input
+                            id="alarm-title"
+                            placeholder="Describe brevemente el problema"
+                            value={alarmData.title}
+                            onChange={(e) =>
+                              setAlarmData({ ...alarmData, title: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="alarm-description">Descripción *</Label>
+                          <Textarea
+                            id="alarm-description"
+                            placeholder="Explica con detalle tu problema o solicitud"
+                            value={alarmData.description}
+                            onChange={(e) =>
+                              setAlarmData({ ...alarmData, description: e.target.value })
+                            }
+                            rows={4}
+                          />
+                        </div>
 
-                    {/* Adjuntar archivos */}
-                    <div className="space-y-2">
-                      <Label htmlFor="file-upload">Adjuntar Evidencia (opcional)</Label>
-                      <div className="space-y-2">
-                        <input
-                          id="file-upload"
-                          type="file"
-                          multiple
-                          accept="image/*,video/*,.pdf,.doc,.docx"
-                          onChange={(e) => {
-                            const files = Array.from(e.target.files || []);
-                            setSelectedFiles((prev) => [...prev, ...files]);
-                          }}
-                          className="hidden"
-                        />
-                        <label htmlFor="file-upload">
-                          <Button type="button" variant="outline" className="w-full" asChild>
-                            <span>
-                              <Paperclip className="mr-2 h-4 w-4" />
-                              Seleccionar Archivos
-                            </span>
-                          </Button>
-                        </label>
-
-                        {selectedFiles.length > 0 && (
+                        <div className="space-y-2">
+                          <Label htmlFor="file-upload">Adjuntar Evidencia (opcional)</Label>
                           <div className="space-y-2">
-                            {selectedFiles.map((file, index) => (
-                              <div
-                                key={index}
-                                className="flex items-center justify-between p-2 bg-muted rounded-lg"
-                              >
-                                <div className="flex items-center gap-2 text-sm">
-                                  <Paperclip className="h-3 w-3" />
-                                  <span className="truncate max-w-[200px]">{file.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    ({(file.size / 1024).toFixed(1)} KB)
-                                  </span>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
-                                  }
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                            <input
+                              id="file-upload"
+                              type="file"
+                              multiple
+                              accept="image/*,video/*,.pdf,.doc,.docx"
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || []);
+                                setSelectedFiles((prev) => [...prev, ...files]);
+                              }}
+                              className="hidden"
+                            />
+                            <label htmlFor="file-upload">
+                              <Button type="button" variant="outline" className="w-full" asChild>
+                                <span>
+                                  <Paperclip className="mr-2 h-4 w-4" />
+                                  Seleccionar Archivos
+                                </span>
+                              </Button>
+                            </label>
 
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handleCreateAlarm}
-                        className="flex-1"
-                        disabled={uploadingFiles}
-                      >
-                        {uploadingFiles ? "Enviando..." : "Enviar Solicitud"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowAlarmForm(false);
-                          setAlarmData({ title: "", description: "" });
-                          setSelectedFiles([]);
-                        }}
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                            {selectedFiles.length > 0 && (
+                              <div className="space-y-2">
+                                {selectedFiles.map((file, index) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-center justify-between p-2 bg-muted rounded-lg"
+                                  >
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <Paperclip className="h-3 w-3" />
+                                      <span className="truncate max-w-[200px]">{file.name}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        ({(file.size / 1024).toFixed(1)} KB)
+                                      </span>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+                                      }
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setShowAlarmForm(false);
+                              setAlarmData({ title: "", description: "" });
+                              setSelectedFiles([]);
+                            }}
+                            className="flex-1"
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            onClick={handleCreateAlarm}
+                            disabled={uploadingFiles}
+                            className="flex-1"
+                          >
+                            {uploadingFiles ? "Enviando..." : "Enviar Solicitud"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="chat">
+                <UserChat accessCode={accessCode} />
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>

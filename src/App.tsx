@@ -12,9 +12,10 @@ import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Personnel from "./pages/Personnel";
 import BulkPersonnel from "./pages/BulkPersonnel";
-import BulkPaste from "./pages/BulkPaste";
 import BulkEdit from "./pages/BulkEdit";
+import BulkPaste from "./pages/BulkPaste";
 import Applications from "./pages/Applications";
+import ApplicationCredentials from "./pages/ApplicationCredentials";
 import HelpDesk from "./pages/HelpDesk";
 import UserPortal from "./pages/UserPortal";
 import NotFound from "./pages/NotFound";
@@ -105,6 +106,16 @@ const App = () => (
                 <ProtectedRoute>
                   <Layout>
                     <Applications />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/application-credentials"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <ApplicationCredentials />
                   </Layout>
                 </ProtectedRoute>
               }
