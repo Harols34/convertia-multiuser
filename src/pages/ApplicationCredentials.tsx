@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Save, RefreshCw } from "lucide-react";
+import { Save, RefreshCw, Search, Eye, EyeOff } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -47,6 +47,8 @@ export default function ApplicationCredentials() {
   const [credentials, setCredentials] = useState<UserAppCredential[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -234,9 +236,13 @@ export default function ApplicationCredentials() {
 
       {selectedApp && selectedCompany && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Credenciales - {users.length} usuarios</CardTitle>
-            <div className="flex gap-2">
+          <CardHeader className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Credenciales - {users.filter(u => 
+                u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                u.document_number.includes(searchTerm)
+              ).length} usuarios</CardTitle>
+              <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -250,6 +256,16 @@ export default function ApplicationCredentials() {
                 <Save className="h-4 w-4 mr-2" />
                 Guardar Todos
               </Button>
+              </div>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o documento..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
             </div>
           </CardHeader>
           <CardContent>
@@ -265,7 +281,16 @@ export default function ApplicationCredentials() {
                   </tr>
                 </thead>
                 <tbody>
-                  {credentials.map((cred) => {
+                  {credentials
+                    .filter((cred) => {
+                      const user = users.find((u) => u.id === cred.user_id);
+                      if (!user) return false;
+                      return (
+                        user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        user.document_number.includes(searchTerm)
+                      );
+                    })
+                    .map((cred) => {
                     const user = users.find((u) => u.id === cred.user_id);
                     return (
                       <tr key={cred.user_id} className="border-t hover:bg-muted/50">
@@ -281,14 +306,33 @@ export default function ApplicationCredentials() {
                           />
                         </td>
                         <td className="p-3">
-                          <Input
-                            type="password"
-                            value={cred.password}
-                            onChange={(e) =>
-                              handleCredentialChange(cred.user_id, "password", e.target.value)
-                            }
-                            placeholder="contraseña"
-                          />
+                          <div className="flex gap-2">
+                            <Input
+                              type={visiblePasswords[cred.user_id] ? "text" : "password"}
+                              value={cred.password}
+                              onChange={(e) =>
+                                handleCredentialChange(cred.user_id, "password", e.target.value)
+                              }
+                              placeholder="contraseña"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setVisiblePasswords(prev => ({
+                                  ...prev,
+                                  [cred.user_id]: !prev[cred.user_id]
+                                }));
+                              }}
+                              className="px-2"
+                            >
+                              {visiblePasswords[cred.user_id] ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
                         </td>
                         <td className="p-3">
                           <Input

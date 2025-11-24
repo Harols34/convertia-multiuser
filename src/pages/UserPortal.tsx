@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Key, Grid3x3, Bell, ExternalLink, Paperclip, X, Home, FileText, Download } from "lucide-react";
+import { Search, Key, Grid3x3, Bell, ExternalLink, Paperclip, X, Home, FileText, Download, Eye, EyeOff } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UserChat from "./UserChat";
+import AlarmAttachment from "@/components/AlarmAttachment";
 import {
   Collapsible,
   CollapsibleContent,
@@ -54,6 +55,7 @@ export default function UserPortal() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [userAlarms, setUserAlarms] = useState<any[]>([]);
   const [loadingAlarms, setLoadingAlarms] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   // Cargar automáticamente si viene el código por URL
@@ -155,18 +157,16 @@ export default function UserPortal() {
       return;
     }
 
-    const { data: userApps } = await supabase
+    const { data: userApps, error: appsError } = await supabase
       .from("user_applications")
       .select(`
         *,
         global_applications:global_application_id (
-          id,
           name,
           description,
           url
         ),
         company_applications:application_id (
-          id,
           name,
           description,
           url
@@ -174,8 +174,15 @@ export default function UserPortal() {
       `)
       .eq("end_user_id", user.id);
 
+    if (appsError) {
+      console.error("Error loading applications:", appsError);
+    }
+
     if (userApps) {
+      console.log("User applications loaded:", userApps);
       setApplications(userApps as any);
+    } else {
+      console.log("No applications found for user");
     }
 
     setUserData(user);
@@ -359,13 +366,23 @@ export default function UserPortal() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {applications.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        No tienes aplicativos asignados
-                      </p>
+                      <div className="text-center py-8 space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          No tienes aplicativos asignados
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Contacta al administrador para que te asigne aplicativos
+                        </p>
+                      </div>
                     ) : (
                       applications.map((app) => {
+                        console.log("Rendering app:", app);
                         const appData = app.global_applications || app.company_applications;
-                        if (!appData) return null;
+                        console.log("App data:", appData);
+                        if (!appData) {
+                          console.log("No app data found, skipping");
+                          return null;
+                        }
 
                         return (
                           <Collapsible key={app.id}>
@@ -407,9 +424,29 @@ export default function UserPortal() {
                                   </div>
                                 )}
                                 {app.password && (
-                                  <div className="text-sm">
+                                  <div className="text-sm flex items-center gap-2">
                                     <span className="font-medium">Contraseña:</span>{" "}
-                                    <code className="bg-muted px-2 py-1 rounded">{app.password}</code>
+                                    <code className="bg-muted px-2 py-1 rounded">
+                                      {visiblePasswords[app.id] ? app.password : "••••••••"}
+                                    </code>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setVisiblePasswords(prev => ({
+                                          ...prev,
+                                          [app.id]: !prev[app.id]
+                                        }));
+                                      }}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      {visiblePasswords[app.id] ? (
+                                        <EyeOff className="h-3 w-3" />
+                                      ) : (
+                                        <Eye className="h-3 w-3" />
+                                      )}
+                                    </Button>
                                   </div>
                                 )}
                                 {app.notes && (
@@ -491,26 +528,12 @@ export default function UserPortal() {
                                   <span className="font-medium text-sm">Archivos Adjuntos:</span>
                                   <div className="space-y-2 mt-2">
                                     {alarm.attachments.map((attachment: any) => (
-                                      <div key={attachment.id} className="flex items-center justify-between p-2 bg-muted rounded-lg">
-                                        <div className="flex items-center gap-2 text-sm">
-                                          <Paperclip className="h-3 w-3" />
-                                          <span className="truncate max-w-[200px]">{attachment.file_name}</span>
-                                        </div>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={async () => {
-                                            const { data } = await supabase.storage
-                                              .from("alarm-attachments")
-                                              .createSignedUrl(attachment.file_path, 60);
-                                            if (data?.signedUrl) {
-                                              window.open(data.signedUrl, "_blank");
-                                            }
-                                          }}
-                                        >
-                                          <Download className="h-3 w-3" />
-                                        </Button>
-                                      </div>
+                                      <AlarmAttachment
+                                        key={attachment.id}
+                                        attachmentPath={attachment.file_path}
+                                        attachmentName={attachment.file_name}
+                                        attachmentType={attachment.file_type}
+                                      />
                                     ))}
                                   </div>
                                 </div>

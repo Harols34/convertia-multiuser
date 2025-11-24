@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Paperclip, X, Download } from "lucide-react";
+import { Send, Paperclip, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import ChatAttachment from "./ChatAttachment";
 
 interface Message {
   id: string;
@@ -184,24 +185,12 @@ export default function Chat({ endUserId, isAdmin = false }: ChatProps) {
                   <p className="text-sm">{msg.message}</p>
                   
                   {msg.attachment_url && (
-                    <div className="mt-2 flex items-center gap-2 p-2 bg-background/10 rounded">
-                      <Paperclip className="h-3 w-3" />
-                      <span className="text-xs truncate">{msg.attachment_name}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={async () => {
-                          const { data } = await supabase.storage
-                            .from("chat-attachments")
-                            .createSignedUrl(msg.attachment_url!, 60);
-                          if (data?.signedUrl) {
-                            window.open(data.signedUrl, "_blank");
-                          }
-                        }}
-                      >
-                        <Download className="h-3 w-3" />
-                      </Button>
+                    <div className="mt-2">
+                      <ChatAttachment
+                        attachmentUrl={msg.attachment_url}
+                        attachmentName={msg.attachment_name}
+                        attachmentType={msg.attachment_type}
+                      />
                     </div>
                   )}
                   
@@ -239,7 +228,7 @@ export default function Chat({ endUserId, isAdmin = false }: ChatProps) {
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept="image/*,video/*,.pdf,.doc,.docx"
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) setSelectedFile(file);

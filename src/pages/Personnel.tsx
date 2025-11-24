@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Plus, Pencil, Trash2, Key, Upload, FileSpreadsheet } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Key, Upload, FileSpreadsheet, Search } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -54,6 +54,7 @@ export default function Personnel() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<EndUser | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const [formData, setFormData] = useState({
     company_id: "",
     document_number: "",
@@ -334,8 +335,17 @@ export default function Personnel() {
         </Card>
       ) : (
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-4">
             <CardTitle>Listado de Personal</CardTitle>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre, documento o empresa..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -350,7 +360,13 @@ export default function Personnel() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {personnel.map((user) => (
+                {personnel
+                  .filter((user) => 
+                    user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    user.document_number.includes(searchTerm) ||
+                    user.companies?.name.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((user) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">
                       {user.companies?.name || "Sin empresa"}
